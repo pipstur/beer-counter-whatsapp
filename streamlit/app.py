@@ -8,6 +8,8 @@ import plotly.express as px
 import requests
 from data.utils.db_utils import SUPABASE_URL, HEADERS_GET
 
+INITIAL_BEER_COUNT = 73
+
 
 @st.cache_data(ttl=300)  # cache for 5 min
 def load_data():
@@ -22,8 +24,7 @@ df = load_data()
 
 st.title("🍺 Beer Tracker Dashboard")
 
-# Total beers (with optional starting offset)
-total_beers = df["beer_count"].sum() + 76
+total_beers = df["beer_count"].sum() + INITIAL_BEER_COUNT
 st.metric("Total Beers Drunk", total_beers)
 
 # Sidebar filters
