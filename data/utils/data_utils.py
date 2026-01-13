@@ -83,11 +83,16 @@ def determine_day_rollover(
 
 def get_beer_count(msg: Locator) -> Optional[int]:
     image_count = msg.locator('div[role="button"][aria-label="Open picture"]').count()
+    gif_count = msg.locator('div[role="button"][aria-label="Play GIF"]').count()
+
     text = msg.inner_text().lower()
     is_view_once = "view once message" in text
 
     if image_count > 0:
         return image_count
+    if gif_count > 0:
+        return gif_count
     if is_view_once:
         return 1
+
     return None
