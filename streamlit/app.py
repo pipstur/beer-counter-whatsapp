@@ -7,6 +7,7 @@ from typing import List, Literal
 import requests
 import pandas as pd
 import plotly.express as px
+from plotly.graph_objs import Figure
 import streamlit as st
 
 from data.utils.db_utils import SUPABASE_URL, HEADERS_GET
@@ -115,6 +116,33 @@ def render_user_timelines(df: pd.DataFrame, users: List[str], level: Aggregation
         st.plotly_chart(fig, width="stretch")
 
 
+def render_beers_by_hour(df: pd.DataFrame) -> Figure:
+    """Pie chart of beers consumed by hour of day (0–23)."""
+    st.subheader("🕒 When Do We Drink?")
+
+    if df.empty:
+        return px.pie(title="No data available")
+
+    df_hour = (
+        df.assign(hour=df["timestamp"].dt.hour).groupby("hour", as_index=False)["beer_count"].sum()
+    )
+
+    df_hour["hour_label"] = df_hour["hour"].astype(str).str.zfill(2) + ":00"
+
+    fig = px.pie(
+        df_hour,
+        names="hour_label",
+        values="beer_count",
+        hole=0.4,
+        title="🕒 Beers by Hour of Day",
+    )
+
+    fig.update_traces(textposition="inside", textinfo="percent+label")
+    fig.update_layout(showlegend=True)
+
+    st.plotly_chart(fig, width="stretch")
+
+
 def main() -> None:
     st.title("🍺 Beer Tracker Dashboard")
 
@@ -145,6 +173,7 @@ def main() -> None:
 
     render_total_timeline(filtered_df, agg_level)
     render_leaderboard(filtered_df)
+    render_beers_by_hour(filtered_df)
     render_user_timelines(filtered_df, selected_users, agg_level)
 
 
