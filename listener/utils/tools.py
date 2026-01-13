@@ -13,7 +13,6 @@ from data.utils.data_utils import (
     convert_to_24h,
     determine_day_rollover,
 )
-from listener import USER_DATA_DIR
 from data.utils.db_utils import save_message
 
 
@@ -23,10 +22,15 @@ SCROLL_UP_STEP = 5  # scroll attempts when catching new messages
 from data.utils import DB_PATH
 
 
-def launch_browser() -> Tuple[BrowserContext, Page]:
+def launch_browser(user_data_dir: str) -> Tuple[BrowserContext, Page]:
+    """
+    Launch a persistent Chromium browser context for WhatsApp Web.
+
+    Each user_data_dir represents a separate WhatsApp session.
+    """
     playwright = sync_playwright().start()
     context = playwright.chromium.launch_persistent_context(
-        USER_DATA_DIR,
+        user_data_dir=user_data_dir,
         headless=False,
         args=["--start-fullscreen"],
         viewport={"width": 1920, "height": 1080},

@@ -1,6 +1,6 @@
 from typing import Optional, Tuple
 from playwright.sync_api import Locator
-from listener import TIME_REGEX
+from listener import TIME_REGEX, PLUS_BEER_REGEX
 from datetime import datetime, timedelta
 
 
@@ -81,18 +81,29 @@ def determine_day_rollover(
     return current_date
 
 
+def extract_message_text(msg: Locator) -> str:
+    spans = msg.locator("span.selectable-text")
+    if spans.count() == 0:
+        return ""
+    return spans.first.inner_text().strip()
+
+
 def get_beer_count(msg: Locator) -> Optional[int]:
     image_count = msg.locator('div[role="button"][aria-label="Open picture"]').count()
     gif_count = msg.locator('div[role="button"][aria-label="Play GIF"]').count()
+    has_media = image_count > 0 or gif_count > 0
 
-    text = msg.inner_text().lower()
-    is_view_once = "view once message" in text
-
-    if image_count > 0:
-        return image_count
-    if gif_count > 0:
-        return gif_count
-    if is_view_once:
+    if not has_media and "view once message" in msg.inner_text().lower():
         return 1
+
+    if has_media:
+        text = extract_message_text(msg).lower()
+        match = PLUS_BEER_REGEX.search(text)
+        if match:
+            return int(match.group(1))
+        if image_count > 0:
+            return image_count
+        if gif_count > 0:
+            return gif_count
 
     return None
