@@ -8,7 +8,6 @@ Python implementation of a automated beer counter and dashboard for a personal w
     - Git
     - uv
     - Whatsapp Web account (though use at own risk, since it is technically against Whatsapp's TOS)
-
 1. Clone the repository:
    ```bash
    git clone https://github.com/pipstur/beer-counter-whatsapp.git
@@ -23,7 +22,15 @@ Python implementation of a automated beer counter and dashboard for a personal w
 3. Setup Supabase:
     - Create a free account on [Supabase](https://supabase.com/)
     - Create a new project
-    - Go to the SQL editor and run the SQL commands in `supabase_setup.sql` to create the necessary tables.
+    - Go to the SQL editor and run the SQL commands to create the necessary tables.
+    ```sql
+        create table messages (
+            id text primary key,
+            user_name text not null,
+            timestamp timestamptz not null,
+            beer_count int not null
+        );
+    ```     
     - Get your API URL and anon key from the project settings.
 4. Setup environment variables:
     - Create a `.env` file in the root directory with the following content:
@@ -36,10 +43,21 @@ Python implementation of a automated beer counter and dashboard for a personal w
     python main.py
     ```
 6. Open the dashboard:
-    - Either on the link:
-    - or run locally with:
+    - Either on the [link](https://beer-counter-whatsapp.streamlit.app/).
+    - Or run locally with:
       ```bash
       streamlit run streamlit/app.py
       ```
 
-# Usage
+# Streamlit dashboard screenshots
+![Streamlit dashboard](https://i.imgur.com/Ir8pfCH.png)
+
+## Leaderboard and most drunk at times
+![Leaderboard and most drunk at times](https://i.imgur.com/OUWdpg2.png)
+
+## User timelines
+![User timelines](https://i.imgur.com/qD0GXnJ.png)
+
+## Filters
+![Filter by date, aggregation level (day/week/month) and users](https://i.imgur.com/93WkiQy.png)
+
