@@ -1,0 +1,2 @@
+SUPABASE_URL = "your_supabase_url"
+SUPABASE_API_KEY = "sb_secret_code"
