@@ -100,7 +100,6 @@ def get_beer_count(msg: Locator) -> Optional[int]:
     has_media = image_count > 0 or gif_count > 0
 
     if not has_media and has_view_once(msg):
-        print(has_view_once(msg))
         return 1
 
     if has_media:
