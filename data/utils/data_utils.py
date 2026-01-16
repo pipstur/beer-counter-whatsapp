@@ -87,13 +87,20 @@ def extract_message_text(msg: Locator) -> str:
         return ""
     return spans.first.inner_text().strip()
 
+def has_view_once(msg: Locator) -> bool:
+    try:
+        badge = msg.locator('text=/view once/i')
+        return badge.count() > 0
+    except:
+        return False
 
 def get_beer_count(msg: Locator) -> Optional[int]:
     image_count = msg.locator('div[role="button"][aria-label="Open picture"]').count()
     gif_count = msg.locator('div[role="button"][aria-label="Play GIF"]').count()
     has_media = image_count > 0 or gif_count > 0
 
-    if not has_media and "view once message" in msg.inner_text().lower():
+    if not has_media and has_view_once(msg):
+        print(has_view_once(msg))
         return 1
 
     if has_media:
