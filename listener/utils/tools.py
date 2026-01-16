@@ -146,7 +146,7 @@ def live_checker(page, chat_panel):
                     current_date=current_date,
                     conn=conn,
                 )
-        for _ in range(50):
+        for _ in range(100):
             page.keyboard.press("PageDown")
             time.sleep(0.5)
 
