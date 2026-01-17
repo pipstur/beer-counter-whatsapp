@@ -97,7 +97,8 @@ def has_view_once(msg: Locator) -> bool:
 def get_beer_count(msg: Locator) -> Optional[int]:
     image_count = msg.locator('div[role="button"][aria-label="Open picture"]').count()
     gif_count = msg.locator('div[role="button"][aria-label="Play GIF"]').count()
-    has_media = image_count > 0 or gif_count > 0
+    video_count = msg.locator('[data-icon="media-play"]').count()
+    has_media = image_count > 0 or gif_count > 0 or video_count > 0
 
     if not has_media and has_view_once(msg):
         return 1
@@ -111,5 +112,8 @@ def get_beer_count(msg: Locator) -> Optional[int]:
             return image_count
         if gif_count > 0:
             return gif_count
+        if video_count > 0:
+            print("Video je ovde", msg)
+            return video_count
 
     return None

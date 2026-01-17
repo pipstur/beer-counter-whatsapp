@@ -47,37 +47,41 @@ def process_message(
     current_date: datetime.date,
     conn: sqlite3.Connection,
 ) -> Tuple[Optional[int], Optional[int], datetime.date]:
-    msg_id = msg.get_attribute("data-id")
-    if not msg_id or msg_id in seen_ids:
+    try:
+        msg_id = msg.evaluate("el => el.getAttribute('data-id')")
+        if not msg_id or msg_id in seen_ids:
+            return last_hour, last_minute, current_date
+
+        seen_ids.add(msg_id)
+
+        timestamp, nickname, _ = extract_user_timestamp(msg)
+        beer_count = get_beer_count(msg)
+        print(timestamp, nickname, beer_count)
+        if beer_count is None or timestamp == "unknown":
+            return last_hour, last_minute, current_date
+
+        hour, minute, ampm = parse_time_12h(timestamp)
+        hour_24 = convert_to_24h(hour, ampm)
+
+        current_date = determine_day_rollover(last_hour, last_minute, hour_24, minute, current_date)
+        last_hour, last_minute = hour_24, minute
+
+        dt = datetime(
+            year=current_date.year,
+            month=current_date.month,
+            day=current_date.day,
+            hour=hour_24,
+            minute=minute,
+            tzinfo=timezone.utc,
+        )
+        full_timestamp = dt.isoformat().replace("+00:00", "Z")
+
+        print(f"{nickname} @ {full_timestamp} → {beer_count} beer(s)")
+        save_message(conn, msg_id, nickname, full_timestamp, beer_count)
+
         return last_hour, last_minute, current_date
-
-    seen_ids.add(msg_id)
-
-    timestamp, nickname, _ = extract_user_timestamp(msg)
-    beer_count = get_beer_count(msg)
-    if beer_count is None or timestamp == "unknown":
+    except Exception:
         return last_hour, last_minute, current_date
-
-    hour, minute, ampm = parse_time_12h(timestamp)
-    hour_24 = convert_to_24h(hour, ampm)
-
-    current_date = determine_day_rollover(last_hour, last_minute, hour_24, minute, current_date)
-    last_hour, last_minute = hour_24, minute
-
-    dt = datetime(
-        year=current_date.year,
-        month=current_date.month,
-        day=current_date.day,
-        hour=hour_24,
-        minute=minute,
-        tzinfo=timezone.utc,
-    )
-    full_timestamp = dt.isoformat().replace("+00:00", "Z")
-
-    print(f"{nickname} @ {full_timestamp} → {beer_count} beer(s)")
-    save_message(conn, msg_id, nickname, full_timestamp, beer_count)
-
-    return last_hour, last_minute, current_date
 
 
 def live_checker(page, chat_panel):
