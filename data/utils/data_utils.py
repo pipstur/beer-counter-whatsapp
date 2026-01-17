@@ -113,7 +113,6 @@ def get_beer_count(msg: Locator) -> Optional[int]:
         if gif_count > 0:
             return gif_count
         if video_count > 0:
-            print("Video je ovde", msg)
             return video_count
 
     return None
