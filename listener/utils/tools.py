@@ -56,7 +56,6 @@ def process_message(
 
         timestamp, nickname, _ = extract_user_timestamp(msg)
         beer_count = get_beer_count(msg)
-        print(timestamp, nickname, beer_count)
         if beer_count is None or timestamp == "unknown":
             return last_hour, last_minute, current_date
 
