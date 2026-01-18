@@ -4,14 +4,14 @@ rootutils.setup_root(__file__, indicator="README.md", pythonpath=True)
 
 from listener.utils.tools import launch_browser, live_checker
 from listener.whatsapp import open_whatsapp, open_group, get_chat_panel
-from listener import GROUP_PREFIX
+from listener import GROUP_PREFIX, USER_DATA_DIR
 from data.utils.db_utils import init_db
 from data.utils import DB_PATH
 
 
 def main() -> None:
     init_db(DB_PATH)
-    context, page = launch_browser()
+    context, page = launch_browser(user_data_dir=USER_DATA_DIR)
 
     try:
         open_whatsapp(page)
