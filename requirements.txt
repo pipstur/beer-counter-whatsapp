@@ -8,3 +8,4 @@ rootutils==1.0.7
 
 plotly==6.5.1
 streamlit==1.52.2
+rootutils==1.0.7

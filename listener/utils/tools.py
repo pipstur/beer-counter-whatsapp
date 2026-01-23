@@ -13,7 +13,6 @@ from data.utils.data_utils import (
     convert_to_24h,
     determine_day_rollover,
 )
-from listener import USER_DATA_DIR
 from data.utils.db_utils import save_message
 
 
@@ -23,10 +22,15 @@ SCROLL_UP_STEP = 5  # scroll attempts when catching new messages
 from data.utils import DB_PATH
 
 
-def launch_browser() -> Tuple[BrowserContext, Page]:
+def launch_browser(user_data_dir: str) -> Tuple[BrowserContext, Page]:
+    """
+    Launch a persistent Chromium browser context for WhatsApp Web.
+
+    Each user_data_dir represents a separate WhatsApp session.
+    """
     playwright = sync_playwright().start()
     context = playwright.chromium.launch_persistent_context(
-        USER_DATA_DIR,
+        user_data_dir=user_data_dir,
         headless=False,
         args=["--start-fullscreen"],
         viewport={"width": 1920, "height": 1080},
@@ -43,37 +47,40 @@ def process_message(
     current_date: datetime.date,
     conn: sqlite3.Connection,
 ) -> Tuple[Optional[int], Optional[int], datetime.date]:
-    msg_id = msg.get_attribute("data-id")
-    if not msg_id or msg_id in seen_ids:
+    try:
+        msg_id = msg.evaluate("el => el.getAttribute('data-id')")
+        if not msg_id or msg_id in seen_ids:
+            return last_hour, last_minute, current_date
+
+        seen_ids.add(msg_id)
+
+        timestamp, nickname, _ = extract_user_timestamp(msg)
+        beer_count = get_beer_count(msg)
+        if beer_count is None or timestamp == "unknown":
+            return last_hour, last_minute, current_date
+
+        hour, minute, ampm = parse_time_12h(timestamp)
+        hour_24 = convert_to_24h(hour, ampm)
+
+        current_date = determine_day_rollover(last_hour, last_minute, hour_24, minute, current_date)
+        last_hour, last_minute = hour_24, minute
+
+        dt = datetime(
+            year=current_date.year,
+            month=current_date.month,
+            day=current_date.day,
+            hour=hour_24,
+            minute=minute,
+            tzinfo=timezone.utc,
+        )
+        full_timestamp = dt.isoformat().replace("+00:00", "Z")
+
+        print(f"{nickname} @ {full_timestamp} → {beer_count} beer(s)")
+        save_message(conn, msg_id, nickname, full_timestamp, beer_count)
+
         return last_hour, last_minute, current_date
-
-    seen_ids.add(msg_id)
-
-    timestamp, nickname, _ = extract_user_timestamp(msg)
-    beer_count = get_beer_count(msg)
-    if beer_count is None or timestamp == "unknown":
+    except Exception:
         return last_hour, last_minute, current_date
-
-    hour, minute, ampm = parse_time_12h(timestamp)
-    hour_24 = convert_to_24h(hour, ampm)
-
-    current_date = determine_day_rollover(last_hour, last_minute, hour_24, minute, current_date)
-    last_hour, last_minute = hour_24, minute
-
-    dt = datetime(
-        year=current_date.year,
-        month=current_date.month,
-        day=current_date.day,
-        hour=hour_24,
-        minute=minute,
-        tzinfo=timezone.utc,
-    )
-    full_timestamp = dt.isoformat().replace("+00:00", "Z")
-
-    print(f"{nickname} @ {full_timestamp} → {beer_count} beer(s)")
-    save_message(conn, msg_id, nickname, full_timestamp, beer_count)
-
-    return last_hour, last_minute, current_date
 
 
 def live_checker(page, chat_panel):
@@ -142,7 +149,7 @@ def live_checker(page, chat_panel):
                     current_date=current_date,
                     conn=conn,
                 )
-        for _ in range(50):
+        for _ in range(100):
             page.keyboard.press("PageDown")
             time.sleep(0.5)
 
