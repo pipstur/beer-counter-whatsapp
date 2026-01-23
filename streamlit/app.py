@@ -19,6 +19,26 @@ AggregationLevel = Literal["Hour", "Day", "Week"]
 INITIAL_BEER_COUNT = 73
 CACHE_TTL_SEC = 300
 WEEKDAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+ACHIEVEMENT_INFO = {
+    "Noćna ptica 🦉": {
+        "description": "Najviše popijenih piva između 23:00 i 04:00.",
+    },
+    "Ranoranilac 🌅": {
+        "description": "Najviše popijenih piva između 04:00 i 11:00.",
+    },
+    "Vikendaš 🏖️": {
+        "description": "Najviše piva petkom uveče i tokom vikenda.",
+    },
+    "Sprinter ⚡": {
+        "description": "Najviše piva u jednoj sesiji (razmak ≤ 3h).",
+    },
+    "Maratonac 🏃": {
+        "description": "Najduži niz dana sa bar jednim pivom.",
+    },
+    "Povratak kralja 👑": {
+        "description": "Najveći povratak nakon ≥7 dana pauze (u 3 dana).",
+    },
+}
 
 
 @st.cache_data(ttl=CACHE_TTL_SEC)
@@ -244,37 +264,39 @@ def render_rank_over_time(df: pd.DataFrame) -> None:
 
 def compute_achievements(df: pd.DataFrame) -> dict:
     df_tmp = df.copy()
-    df_tmp["hour"], df_tmp["weekday"] = (
-        df_tmp["timestamp"].dt.hour,
-        df_tmp["timestamp"].dt.day_name(),
-    )
+    df_tmp["hour"] = df_tmp["timestamp"].dt.hour
+    df_tmp["weekday"] = df_tmp["timestamp"].dt.day_name()
+
     achievements = {}
 
+    def top_user(series: pd.Series):
+        if series.empty:
+            return None
+        user = series.idxmax()
+        return {
+            "user": user,
+            "value": int(series.loc[user]),
+        }
+
     night_df = df_tmp[(df_tmp["hour"] >= 23) | (df_tmp["hour"] < 4)]
-    achievements["Night Owl 🦉"] = (
-        night_df.groupby("user_name")["beer_count"].sum().idxmax() if not night_df.empty else None
-    )
+    achievements["Noćna ptica 🦉"] = top_user(night_df.groupby("user_name")["beer_count"].sum())
 
     early_df = df_tmp[(df_tmp["hour"] >= 4) & (df_tmp["hour"] < 11)]
-    achievements["Early Bird 🌅"] = (
-        early_df.groupby("user_name")["beer_count"].sum().idxmax() if not early_df.empty else None
-    )
+    achievements["Ranoranilac 🌅"] = top_user(early_df.groupby("user_name")["beer_count"].sum())
 
     weekend_df = df_tmp[
         ((df_tmp["weekday"] == "Friday") & (df_tmp["hour"] >= 18))
         | (df_tmp["weekday"].isin(["Saturday", "Sunday"]))
     ]
-    achievements["Weekend Warrior 🏖️"] = (
-        weekend_df.groupby("user_name")["beer_count"].sum().idxmax()
-        if not weekend_df.empty
-        else None
-    )
+    achievements["Vikendaš 🏖️"] = top_user(weekend_df.groupby("user_name")["beer_count"].sum())
 
     df_sorted = df_tmp.sort_values(["user_name", "timestamp"])
-    sessions = []
+    session_results = []
+
     for user, group in df_sorted.groupby("user_name"):
-        group = group.reset_index(drop=True)
-        session_total, max_total, prev_time = 0, 0, None
+        prev_time = None
+        session_total = max_total = 0
+
         for _, row in group.iterrows():
             if prev_time is None or (row["timestamp"] - prev_time) <= timedelta(hours=3):
                 session_total += row["beer_count"]
@@ -282,50 +304,94 @@ def compute_achievements(df: pd.DataFrame) -> dict:
                 max_total = max(max_total, session_total)
                 session_total = row["beer_count"]
             prev_time = row["timestamp"]
-        sessions.append((user, max(max_total, session_total)))
-    achievements["Sprinter ⚡"] = max(sessions, key=lambda x: x[1])[0] if sessions else None
 
-    streaks = []
+        session_results.append((user, max(max_total, session_total)))
+
+    achievements["Sprinter ⚡"] = (
+        {
+            "user": max(session_results, key=lambda x: x[1])[0],
+            "value": max(session_results, key=lambda x: x[1])[1],
+        }
+        if session_results
+        else None
+    )
+
+    streak_results = []
+
     for user, group in df_tmp.groupby("user_name"):
         days = sorted(group["timestamp"].dt.date.unique())
-        max_streak, streak = 0, 1
+        max_streak = streak = 1
+
         for i in range(1, len(days)):
             streak = streak + 1 if (days[i] - days[i - 1]).days == 1 else 1
             max_streak = max(max_streak, streak)
-        streaks.append((user, max_streak))
-    achievements["Maratonac 🏃"] = max(streaks, key=lambda x: x[1])[0] if streaks else None
 
-    best_user = None
+        streak_results.append((user, max_streak))
+
+    achievements["Maratonac 🏃"] = (
+        {
+            "user": max(streak_results, key=lambda x: x[1])[0],
+            "value": max(streak_results, key=lambda x: x[1])[1],
+        }
+        if streak_results
+        else None
+    )
+
+    best = None
+    best_value = 0
+
     for user, group in df_sorted.groupby("user_name"):
-        group = group.reset_index(drop=True)
-        prev_time, max_jump = None, 0
+        prev_time = None
         for _, row in group.iterrows():
-            if prev_time is None:
-                prev_time = row["timestamp"]
-                continue
-            gap = (row["timestamp"] - prev_time).days
-            if gap >= 7:
-                jump_sum = group[
+            if prev_time is not None and (row["timestamp"] - prev_time).days >= 7:
+                window_sum = group[
                     (group["timestamp"] >= row["timestamp"])
                     & (group["timestamp"] <= row["timestamp"] + timedelta(days=3))
                 ]["beer_count"].sum()
-                if jump_sum > max_jump:
-                    max_jump, best_user = jump_sum, user
+
+                if window_sum > best_value:
+                    best_value = window_sum
+                    best = user
             prev_time = row["timestamp"]
-    achievements["Comeback Kid 🔥"] = best_user
+
+    achievements["Povratak kralja 👑"] = (
+        {"user": best, "value": best_value} if best is not None else None
+    )
 
     return achievements
 
 
 def render_achievements(df: pd.DataFrame) -> None:
-    if df["user_name"].nunique() < 2:
-        st.warning("Please select at least two users to compute achievements.")
-        return
-    st.subheader("🏆 Achievements / Fun Titles")
     achievements = compute_achievements(df)
-    cols = st.columns(3)
-    for i, (title, user) in enumerate(achievements.items()):
-        cols[i % 3].metric(title, user)
+
+    st.subheader("🏆 Dostignuća")
+
+    cols = st.columns(2)
+    col_idx = 0
+
+    for title, result in achievements.items():
+        info = ACHIEVEMENT_INFO[title]
+        description = info["description"]
+        unit = info.get("unit", "")
+
+        with cols[col_idx]:
+            if result is None:
+                st.metric(
+                    label=title,
+                    value="—",
+                    help=f"Nema dovoljno podataka.\n\n{description}",
+                )
+            else:
+                value_text = f'{result["value"]} {unit}'.strip() if unit else str(result["value"])
+
+                st.metric(
+                    label=title,
+                    value=result["user"],
+                    delta=value_text,
+                    help=description,
+                )
+
+        col_idx = (col_idx + 1) % 2
 
 
 def compute_user_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -371,6 +437,10 @@ def compute_user_features(df: pd.DataFrame) -> pd.DataFrame:
 
 def render_who_drinks_like_whom(df: pd.DataFrame) -> None:
     st.subheader("🧬 Who Drinks Like Whom")
+    st.info(
+        """Select two features to visualize user similarities in drinking behavior.
+        Users with similar habits will cluster together."""
+    )
     features_df = compute_user_features(df)
     features_df["short_name"] = features_df["user_name"].str[:5]
     numeric_cols = [c for c in features_df.columns if c not in ["user_name", "short_name"]]
@@ -392,6 +462,10 @@ def render_who_drinks_like_whom(df: pd.DataFrame) -> None:
 
 def render_carry_of_week(df: pd.DataFrame) -> None:
     st.subheader("⚖️ Carry of the Week")
+    st.info(
+        """The 'Carry of the Week' is awarded to the user who consumes more than 4% of the
+        total beers in a given week. If no user exceeds this threshold, the title is not awarded"""
+    )
     df_tmp = df.copy()
     df_tmp["week"] = df_tmp["timestamp"].dt.to_period("W").astype(str)
     weekly = df_tmp.groupby(["week", "user_name"])["beer_count"].sum().reset_index()
@@ -431,6 +505,13 @@ def render_carry_of_week(df: pd.DataFrame) -> None:
 
 def render_regular_vs_chaos(df: pd.DataFrame) -> None:
     st.subheader("📊 Regularity vs Chaos")
+    st.info(
+        """On the X-axis: Number of active days (days with at least one beer).
+        On the Y-axis: Average beers consumed per active day.
+        Regular drinkers appear towards the right side, while chaotic drinkers are
+        towards the upper left"""
+    )
+
     df_tmp = df.copy()
     df_tmp["date"] = df_tmp["timestamp"].dt.date
     features = [
