@@ -151,6 +151,12 @@ def main() -> None:
 
     # Sidebar filters
     st.sidebar.header("Filters")
+    st.sidebar.header("View")
+
+    view_mode = st.sidebar.radio(
+        "Choose view",
+        ["📈 Statistics", "👤 Users"],
+    )
     users = sorted(df["user_name"].unique().tolist())
     selected_users = st.sidebar.multiselect("Users", users, default=users)
 
@@ -169,12 +175,17 @@ def main() -> None:
     filtered_df = filter_by_date_range(filtered_df, start_date, end_date)
 
     st.sidebar.header("Aggregation")
-    agg_level: AggregationLevel = st.sidebar.selectbox("Aggregate by", ["Hour", "Day", "Week"])
+    agg_level: AggregationLevel = st.sidebar.selectbox(
+        "Aggregate by", ["Hour", "Day", "Week"]
+    )
 
-    render_total_timeline(filtered_df, agg_level)
-    render_leaderboard(filtered_df)
-    render_beers_by_hour(filtered_df)
-    render_user_timelines(filtered_df, selected_users, agg_level)
+    if view_mode == "📈 Statistics":
+        render_total_timeline(filtered_df, agg_level)
+        render_beers_by_hour(filtered_df)
+
+    elif view_mode == "👤 Users":
+        render_leaderboard(filtered_df)
+        render_user_timelines(filtered_df, selected_users, agg_level)
 
 
 if __name__ == "__main__":
