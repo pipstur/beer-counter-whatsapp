@@ -161,18 +161,14 @@ def render_cumulative_global(df: pd.DataFrame) -> None:
 
 def render_hour_weekday_heatmap(df: pd.DataFrame) -> None:
     df_tmp = df.copy()
-
     df_tmp["hour_bin"] = (df_tmp["timestamp"].dt.hour // 4) * 4
     df_tmp["hour_label"] = (
         df_tmp["hour_bin"].astype(str).str.zfill(2)
         + "–"
         + (df_tmp["hour_bin"] + 3).astype(str).str.zfill(2)
     )
-
     df_tmp["weekday"] = pd.Categorical(
-        df_tmp["timestamp"].dt.day_name(),
-        categories=WEEKDAY_ORDER,
-        ordered=True,
+        df_tmp["timestamp"].dt.day_name(), categories=WEEKDAY_ORDER, ordered=True
     )
 
     heatmap_df = (
@@ -191,31 +187,14 @@ def render_hour_weekday_heatmap(df: pd.DataFrame) -> None:
         aspect="auto",
         title="Beers by Time of Day & Weekday",
     )
-
-    fig.update_layout(
-        yaxis=dict(autorange="reversed"),
-    )
-
+    fig.update_layout(yaxis=dict(autorange="reversed"))
     st.plotly_chart(fig, width="stretch")
 
+
 def render_cumulative_per_user(df: pd.DataFrame) -> None:
-    top_users = (
-        df.groupby("user_name")["beer_count"]
-        .sum()
-        .sort_values(ascending=False)
-        .head(15)
-        .index
-    )
-
-    df_filtered = (
-        df[df["user_name"].isin(top_users)]
-        .sort_values("timestamp")
-        .copy()
-    )
-
-    df_filtered["cumulative"] = (
-        df_filtered.groupby("user_name")["beer_count"].cumsum()
-    )
+    top_users = df.groupby("user_name")["beer_count"].sum().nlargest(15).index
+    df_filtered = df[df["user_name"].isin(top_users)].sort_values("timestamp").copy()
+    df_filtered["cumulative"] = df_filtered.groupby("user_name")["beer_count"].cumsum()
 
     fig = px.line(
         df_filtered,
@@ -224,53 +203,26 @@ def render_cumulative_per_user(df: pd.DataFrame) -> None:
         color="user_name",
         title="📈 Cumulative Beers per User (Top 15)",
     )
-
     st.plotly_chart(fig, width="stretch")
+
 
 def render_rank_over_time(df: pd.DataFrame) -> None:
     df_week = (
-        df
-        .assign(week=df["timestamp"].dt.to_period("W").astype(str))
+        df.assign(week=df["timestamp"].dt.to_period("W").astype(str))
         .groupby(["week", "user_name"])["beer_count"]
         .sum()
         .reset_index()
-        .sort_values("week")
     )
-
-    weeks = df_week["week"].unique()
-    users = df_week["user_name"].unique()
-
-    full_index = pd.MultiIndex.from_product(
-        [weeks, users], names=["week", "user_name"]
-    )
-
+    weeks, users = df_week["week"].unique(), df_week["user_name"].unique()
+    full_index = pd.MultiIndex.from_product([weeks, users], names=["week", "user_name"])
     df_full = (
-        df_week
-        .set_index(["week", "user_name"])
-        .reindex(full_index, fill_value=0)
-        .reset_index()
-        .sort_values("week")
+        df_week.set_index(["week", "user_name"]).reindex(full_index, fill_value=0).reset_index()
     )
+    df_full["cumulative"] = df_full.groupby("user_name")["beer_count"].cumsum()
 
-    df_full["cumulative"] = (
-        df_full.groupby("user_name")["beer_count"].cumsum()
-    )
-
-    top_users = (
-        df_full.groupby("user_name")["cumulative"]
-        .max()
-        .sort_values(ascending=False)
-        .head(10)
-        .index
-    )
-
+    top_users = df_full.groupby("user_name")["cumulative"].max().nlargest(10).index
     df_full = df_full[df_full["user_name"].isin(top_users)]
-
-    df_full["rank"] = (
-        df_full.groupby("week")["cumulative"]
-        .rank(method="first", ascending=False)
-    )
-
+    df_full["rank"] = df_full.groupby("week")["cumulative"].rank(method="first", ascending=False)
     df_full = df_full[df_full["rank"] <= 10]
 
     fig = px.bar(
@@ -285,65 +237,44 @@ def render_rank_over_time(df: pd.DataFrame) -> None:
         title="🏁 Cumulative Leaderboard Race (Weekly, Top 15)",
         labels={"cumulative": "Total Beers", "rank": "Rank"},
     )
-
     fig.update_traces(textposition="inside")
-
-    fig.update_layout(
-        yaxis=dict(
-            tickmode="linear",
-            dtick=1,
-            autorange=False,
-        ),
-        showlegend=True,
-    )
-
+    fig.update_layout(yaxis=dict(tickmode="linear", dtick=1, autorange=False), showlegend=True)
     st.plotly_chart(fig, width="stretch")
+
 
 def compute_achievements(df: pd.DataFrame) -> dict:
     df_tmp = df.copy()
-    df_tmp["hour"] = df_tmp["timestamp"].dt.hour
-    df_tmp["weekday"] = df_tmp["timestamp"].dt.day_name()
-
+    df_tmp["hour"], df_tmp["weekday"] = (
+        df_tmp["timestamp"].dt.hour,
+        df_tmp["timestamp"].dt.day_name(),
+    )
     achievements = {}
 
-    # --- Night Owl 🦉 ---
-    night_mask = (df_tmp["hour"] >= 23) | (df_tmp["hour"] < 4)
-    night_df = df_tmp[night_mask]
-    if not night_df.empty:
-        grouped = night_df.groupby("user_name")["beer_count"].sum()
-        achievements["Night Owl 🦉"] = grouped.idxmax() if not grouped.empty else None
-    else:
-        achievements["Night Owl 🦉"] = None
+    night_df = df_tmp[(df_tmp["hour"] >= 23) | (df_tmp["hour"] < 4)]
+    achievements["Night Owl 🦉"] = (
+        night_df.groupby("user_name")["beer_count"].sum().idxmax() if not night_df.empty else None
+    )
 
-    # --- Early Bird 🌅 ---
-    early_mask = (df_tmp["hour"] >= 4) & (df_tmp["hour"] < 11)
-    early_df = df_tmp[early_mask]
-    if not early_df.empty:
-        grouped = early_df.groupby("user_name")["beer_count"].sum()
-        achievements["Early Bird 🌅"] = grouped.idxmax() if not grouped.empty else None
-    else:
-        achievements["Early Bird 🌅"] = None
+    early_df = df_tmp[(df_tmp["hour"] >= 4) & (df_tmp["hour"] < 11)]
+    achievements["Early Bird 🌅"] = (
+        early_df.groupby("user_name")["beer_count"].sum().idxmax() if not early_df.empty else None
+    )
 
-    # --- Weekend Warrior 🏖️ ---
-    weekend_mask = (
+    weekend_df = df_tmp[
         ((df_tmp["weekday"] == "Friday") & (df_tmp["hour"] >= 18))
         | (df_tmp["weekday"].isin(["Saturday", "Sunday"]))
+    ]
+    achievements["Weekend Warrior 🏖️"] = (
+        weekend_df.groupby("user_name")["beer_count"].sum().idxmax()
+        if not weekend_df.empty
+        else None
     )
-    weekend_df = df_tmp[weekend_mask]
-    if not weekend_df.empty:
-        grouped = weekend_df.groupby("user_name")["beer_count"].sum()
-        achievements["Weekend Warrior 🏖️"] = grouped.idxmax() if not grouped.empty else None
-    else:
-        achievements["Weekend Warrior 🏖️"] = None
 
-    # --- Sprinter ⚡ ---
     df_sorted = df_tmp.sort_values(["user_name", "timestamp"])
     sessions = []
     for user, group in df_sorted.groupby("user_name"):
         group = group.reset_index(drop=True)
-        session_total = 0
-        max_total = 0
-        prev_time = None
+        session_total, max_total, prev_time = 0, 0, None
         for _, row in group.iterrows():
             if prev_time is None or (row["timestamp"] - prev_time) <= timedelta(hours=3):
                 session_total += row["beer_count"]
@@ -351,44 +282,35 @@ def compute_achievements(df: pd.DataFrame) -> dict:
                 max_total = max(max_total, session_total)
                 session_total = row["beer_count"]
             prev_time = row["timestamp"]
-        max_total = max(max_total, session_total)
-        sessions.append((user, max_total))
+        sessions.append((user, max(max_total, session_total)))
     achievements["Sprinter ⚡"] = max(sessions, key=lambda x: x[1])[0] if sessions else None
 
-    # --- Maratonac 🏃 ---
     streaks = []
     for user, group in df_tmp.groupby("user_name"):
         days = sorted(group["timestamp"].dt.date.unique())
-        max_streak = 0
-        streak = 1
+        max_streak, streak = 0, 1
         for i in range(1, len(days)):
-            if (days[i] - days[i - 1]).days == 1:
-                streak += 1
-            else:
-                streak = 1
+            streak = streak + 1 if (days[i] - days[i - 1]).days == 1 else 1
             max_streak = max(max_streak, streak)
         streaks.append((user, max_streak))
     achievements["Maratonac 🏃"] = max(streaks, key=lambda x: x[1])[0] if streaks else None
 
-    # --- Comeback Kid 🔥 ---
     best_user = None
     for user, group in df_sorted.groupby("user_name"):
         group = group.reset_index(drop=True)
-        prev_time = None
-        max_jump = 0
+        prev_time, max_jump = None, 0
         for _, row in group.iterrows():
             if prev_time is None:
                 prev_time = row["timestamp"]
                 continue
             gap = (row["timestamp"] - prev_time).days
             if gap >= 7:
-                # sum beers in next 3 days
-                window_end = row["timestamp"] + timedelta(days=3)
-                jump_sum = group[(group["timestamp"] >= row["timestamp"]) &
-                                 (group["timestamp"] <= window_end)]["beer_count"].sum()
+                jump_sum = group[
+                    (group["timestamp"] >= row["timestamp"])
+                    & (group["timestamp"] <= row["timestamp"] + timedelta(days=3))
+                ]["beer_count"].sum()
                 if jump_sum > max_jump:
-                    max_jump = jump_sum
-                    best_user = user
+                    max_jump, best_user = jump_sum, user
             prev_time = row["timestamp"]
     achievements["Comeback Kid 🔥"] = best_user
 
@@ -397,12 +319,10 @@ def compute_achievements(df: pd.DataFrame) -> dict:
 
 def render_achievements(df: pd.DataFrame) -> None:
     if df["user_name"].nunique() < 2:
-        st.warning("Pease select at least two users to compute achievements.")
+        st.warning("Please select at least two users to compute achievements.")
         return
-
     st.subheader("🏆 Achievements / Fun Titles")
     achievements = compute_achievements(df)
-
     cols = st.columns(3)
     for i, (title, user) in enumerate(achievements.items()):
         cols[i % 3].metric(title, user)
@@ -410,58 +330,61 @@ def render_achievements(df: pd.DataFrame) -> None:
 
 def compute_user_features(df: pd.DataFrame) -> pd.DataFrame:
     df_tmp = df.copy()
-    df_tmp["hour"] = df_tmp["timestamp"].dt.hour
-    df_tmp["weekday"] = df_tmp["timestamp"].dt.day_name()
-    df_tmp["date"] = df_tmp["timestamp"].dt.date
-
+    df_tmp["hour"], df_tmp["weekday"], df_tmp["date"] = (
+        df_tmp["timestamp"].dt.hour,
+        df_tmp["timestamp"].dt.day_name(),
+        df_tmp["timestamp"].dt.date,
+    )
     features = []
     for user, group in df_tmp.groupby("user_name"):
         total = group["beer_count"].sum()
-        night = group[(group["hour"] >= 23) | (group["hour"] < 4)]["beer_count"].sum() / total
-        weekend = group[group["weekday"].isin(["Friday", "Saturday", "Sunday"])]["beer_count"].sum() / total
-        sessions = []
-        g = group.sort_values("timestamp").reset_index(drop=True)
-        session_total = 0
-        prev_time = None
-        for i, row in g.iterrows():
+        night_ratio = (
+            group[(group["hour"] >= 23) | (group["hour"] < 4)]["beer_count"].sum() / total
+        )
+        weekend_ratio = (
+            group[group["weekday"].isin(["Friday", "Saturday", "Sunday"])]["beer_count"].sum()
+            / total
+        )
+        g, sessions, prev_time = group.sort_values("timestamp").reset_index(drop=True), [], None
+        for _, row in g.iterrows():
             if prev_time is None or (row["timestamp"] - prev_time) <= timedelta(hours=3):
-                session_total += row["beer_count"]
+                sessions_total = (
+                    row["beer_count"] if prev_time is None else sessions_total + row["beer_count"]
+                )
             else:
-                sessions.append(session_total)
-                session_total = row["beer_count"]
+                sessions.append(sessions_total)
+                sessions_total = row["beer_count"]
             prev_time = row["timestamp"]
-        sessions.append(session_total)
-        avg_session = sum(sessions) / len(sessions)
-        active_days = group["date"].nunique()
-        features.append({
-            "user_name": user,
-            "night_ratio": night,
-            "weekend_ratio": weekend,
-            "avg_per_session": avg_session,
-            "active_days": active_days,
-            "avg_per_day": total / active_days,
-        })
+        sessions.append(sessions_total)
+        features.append(
+            {
+                "user_name": user,
+                "night_ratio": night_ratio,
+                "weekend_ratio": weekend_ratio,
+                "avg_per_session": sum(sessions) / len(sessions),
+                "active_days": group["date"].nunique(),
+                "avg_per_day": total / group["date"].nunique(),
+            }
+        )
     return pd.DataFrame(features)
+
 
 def render_who_drinks_like_whom(df: pd.DataFrame) -> None:
     st.subheader("🧬 Who Drinks Like Whom")
     features_df = compute_user_features(df)
-
-    # Kratka imena (prvih 5 karaktera)
     features_df["short_name"] = features_df["user_name"].str[:5]
-
     numeric_cols = [c for c in features_df.columns if c not in ["user_name", "short_name"]]
-    x_feat = st.selectbox("X-axis feature", numeric_cols, index=3)
-    y_feat = st.selectbox("Y-axis feature", numeric_cols, index=4)
-
+    x_feat, y_feat = st.selectbox("X-axis feature", numeric_cols, index=3), st.selectbox(
+        "Y-axis feature", numeric_cols, index=4
+    )
     fig = px.scatter(
         features_df,
         x=x_feat,
         y=y_feat,
-        text="short_name",  # koristi kratka imena
+        text="short_name",
         color="short_name",
         title="Behavioral Similarity Scatter",
-        hover_data=numeric_cols + ["user_name"],  # full name u tooltip
+        hover_data=numeric_cols + ["user_name"],
     )
     fig.update_traces(textposition="top center")
     st.plotly_chart(fig, width="stretch")
@@ -469,33 +392,26 @@ def render_who_drinks_like_whom(df: pd.DataFrame) -> None:
 
 def render_carry_of_week(df: pd.DataFrame) -> None:
     st.subheader("⚖️ Carry of the Week")
-
     df_tmp = df.copy()
     df_tmp["week"] = df_tmp["timestamp"].dt.to_period("W").astype(str)
-
-    weekly = (
-        df_tmp.groupby(["week", "user_name"])["beer_count"]
-        .sum()
-        .reset_index()
-    )
-
+    weekly = df_tmp.groupby(["week", "user_name"])["beer_count"].sum().reset_index()
     weekly_total = (
         weekly.groupby("week")["beer_count"]
         .sum()
         .reset_index()
         .rename(columns={"beer_count": "total_beers"})
     )
-
     merged = weekly.merge(weekly_total, on="week")
     merged["pct"] = merged["beer_count"] / merged["total_beers"] * 100
-
-    top_users = merged.loc[merged.groupby("week")["pct"].idxmax()].copy()
-
+    top_users = merged.loc[merged.groupby("week")["pct"].idxmax()]
     all_weeks = pd.DataFrame({"week": merged["week"].unique()})
-
     final_df = all_weeks.merge(top_users, on="week", how="left")
     final_df["Top User"] = final_df.apply(
-        lambda row: row["user_name"] if pd.notnull(row["pct"]) and row["pct"] > 4 else "No significant carry",
+        lambda row: (
+            row["user_name"]
+            if pd.notnull(row["pct"]) and row["pct"] > 4
+            else "No significant carry"
+        ),
         axis=1,
     )
     final_df["Beers Drunk"] = final_df.apply(
@@ -506,13 +422,10 @@ def render_carry_of_week(df: pd.DataFrame) -> None:
         lambda row: round(row["pct"], 1) if pd.notnull(row["pct"]) and row["pct"] > 4 else 0,
         axis=1,
     )
-
-    final_df = final_df.sort_values("week", ascending=False)
-
     st.table(
-        final_df[["week", "Top User", "Beers Drunk", "% of Total"]].rename(
-            columns={"week": "Week"}
-        )
+        final_df.sort_values("week", ascending=False)[
+            ["week", "Top User", "Beers Drunk", "% of Total"]
+        ].rename(columns={"week": "Week"})
     )
 
 
@@ -520,25 +433,24 @@ def render_regular_vs_chaos(df: pd.DataFrame) -> None:
     st.subheader("📊 Regularity vs Chaos")
     df_tmp = df.copy()
     df_tmp["date"] = df_tmp["timestamp"].dt.date
-    features = []
-    for user, group in df_tmp.groupby("user_name"):
-        active_days = group["date"].nunique()
-        avg_per_day = group.groupby("date")["beer_count"].sum().mean()
-        features.append({
+    features = [
+        {
             "user_name": user,
             "short_name": user[:5],
-            "active_days": active_days,
-            "avg_per_day": avg_per_day,
-        })
+            "active_days": group["date"].nunique(),
+            "avg_per_day": group.groupby("date")["beer_count"].sum().mean(),
+        }
+        for user, group in df_tmp.groupby("user_name")
+    ]
     feat_df = pd.DataFrame(features)
     fig = px.scatter(
         feat_df,
         x="active_days",
         y="avg_per_day",
-        text="short_name", 
+        text="short_name",
         color="short_name",
         title="Regularity vs Average Consumption",
-        hover_data=["user_name", "active_days", "avg_per_day"]
+        hover_data=["user_name", "active_days", "avg_per_day"],
     )
     fig.update_traces(textposition="top center")
     st.plotly_chart(fig, width="stretch")
@@ -553,6 +465,7 @@ def render_fun_and_patterns(df: pd.DataFrame) -> None:
     render_carry_of_week(df)
     st.markdown("---")
     render_regular_vs_chaos(df)
+
 
 def main() -> None:
     st.title("🍺 Beer Tracker Dashboard")
