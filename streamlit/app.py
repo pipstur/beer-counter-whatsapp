@@ -20,9 +20,31 @@ from utils.render_utils import AggregationLevel
 
 @st.cache_data(ttl=CACHE_TTL_SEC)
 def load_data() -> pd.DataFrame:
-    response = requests.get(SUPABASE_URL, headers=HEADERS_GET)
-    response.raise_for_status()
-    df = pd.DataFrame(response.json())
+    page_size = 1000
+    offset = 0
+    rows: list[dict] = []
+
+    while True:
+        response = requests.get(
+            SUPABASE_URL,
+            headers={
+                **HEADERS_GET,
+                "Range": f"{offset}-{offset + page_size - 1}",
+            },
+        )
+        response.raise_for_status()
+
+        batch = response.json()
+        if not batch:
+            break
+
+        rows.extend(batch)
+        offset += page_size
+
+    if not rows:
+        return pd.DataFrame(columns=["timestamp"])
+
+    df = pd.DataFrame(rows)
     df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
     return df
 
