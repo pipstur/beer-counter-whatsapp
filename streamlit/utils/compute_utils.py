@@ -1,6 +1,12 @@
 from datetime import timedelta
 import pandas as pd
 
+from utils import MAX_BEERS_PER_ENTRY
+
+
+def filtered_df(df):
+    return df[df["beer_count"] <= MAX_BEERS_PER_ENTRY]
+
 
 def compute_achievements(df: pd.DataFrame) -> dict:
     df_tmp = df.copy()
@@ -18,19 +24,21 @@ def compute_achievements(df: pd.DataFrame) -> dict:
             "value": int(series.loc[user]),
         }
 
-    night_df = df_tmp[(df_tmp["hour"] >= 23) | (df_tmp["hour"] < 4)]
+    night_df = filtered_df(df_tmp[(df_tmp["hour"] >= 23) | (df_tmp["hour"] < 4)])
     achievements["Noćna ptica 🦉"] = top_user(night_df.groupby("user_name")["beer_count"].sum())
 
-    early_df = df_tmp[(df_tmp["hour"] >= 4) & (df_tmp["hour"] < 11)]
+    early_df = filtered_df(df_tmp[(df_tmp["hour"] >= 4) & (df_tmp["hour"] < 11)])
     achievements["Ranoranilac 🌅"] = top_user(early_df.groupby("user_name")["beer_count"].sum())
 
-    weekend_df = df_tmp[
-        ((df_tmp["weekday"] == "Friday") & (df_tmp["hour"] >= 18))
-        | (df_tmp["weekday"].isin(["Saturday", "Sunday"]))
-    ]
+    weekend_df = filtered_df(
+        df_tmp[
+            ((df_tmp["weekday"] == "Friday") & (df_tmp["hour"] >= 18))
+            | (df_tmp["weekday"].isin(["Saturday", "Sunday"]))
+        ]
+    )
     achievements["Vikendaš 🏖️"] = top_user(weekend_df.groupby("user_name")["beer_count"].sum())
 
-    df_sorted = df_tmp.sort_values(["user_name", "timestamp"])
+    df_sorted = filtered_df(df_tmp).sort_values(["user_name", "timestamp"])
     session_results = []
 
     for user, group in df_sorted.groupby("user_name"):
