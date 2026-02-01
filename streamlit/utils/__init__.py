@@ -27,3 +27,4 @@ AGG_FREQ_MAP = {
     "Day": "D",
     "Week": "W",
 }
+MAX_BEERS_PER_ENTRY = 10
