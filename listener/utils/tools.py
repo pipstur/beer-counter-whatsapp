@@ -83,61 +83,47 @@ def process_message(
         return last_hour, last_minute, current_date
 
 
-def live_checker(page, chat_panel):
+def live_checker(page, chat_panel, live_mode: bool = False) -> None:
     seen_ids = set()  # optionally prefill from DB
 
-    print("Running initial scan...")
-    scroll_attempts = 0
-    last_hour, last_minute = None, None
-    current_date = datetime.now().date()
-
-    while scroll_attempts < 5:
-        messages = chat_panel.locator("div[data-id]")
-        new_found = 0
-        with sqlite3.connect(DB_PATH, timeout=30) as conn:
-            for i in range(messages.count() - 1, -1, -1):  # newest → oldest
-                last_hour, last_minute, current_date = process_message(
-                    msg=messages.nth(i),
-                    seen_ids=seen_ids,
-                    last_hour=last_hour,
-                    last_minute=last_minute,
-                    current_date=current_date,
-                    conn=conn,
-                )
-                new_found += 1
-
-            page.keyboard.press("PageUp")
-            time.sleep(3)
-
-            if new_found == 0:
-                scroll_attempts += 1
-            else:
-                scroll_attempts = 0
-
-    print("Initial scan complete. Entering live check loop...")
-
-    # Live check loop
-    while True:
-        messages = chat_panel.locator("div[data-id]")
-        new_found = 0
-
+    if not live_mode:
+        print("Running initial scan...")
+        scroll_attempts = 0
         last_hour, last_minute = None, None
         current_date = datetime.now().date()
-        for i in range(messages.count() - 1, -1, -1):
-            last_hour, last_minute, current_date = process_message(
-                msg=messages.nth(i),
-                seen_ids=seen_ids,
-                last_hour=last_hour,
-                last_minute=last_minute,
-                current_date=current_date,
-                conn=conn,
-            )
-            new_found += 1
 
-        if new_found > 0:
-            for _ in range(SCROLL_UP_STEP):
+        while scroll_attempts < 5:
+            messages = chat_panel.locator("div[data-id]")
+            new_found = 0
+            with sqlite3.connect(DB_PATH, timeout=30) as conn:
+                for i in range(messages.count() - 1, -1, -1):  # newest → oldest
+                    last_hour, last_minute, current_date = process_message(
+                        msg=messages.nth(i),
+                        seen_ids=seen_ids,
+                        last_hour=last_hour,
+                        last_minute=last_minute,
+                        current_date=current_date,
+                        conn=conn,
+                    )
+                    new_found += 1
+
                 page.keyboard.press("PageUp")
-                time.sleep(0.5)
+                time.sleep(3)
+
+                if new_found == 0:
+                    scroll_attempts += 1
+                else:
+                    scroll_attempts = 0
+
+        print("Initial scan complete.")
+
+    # Live check loop
+    print("Entering live check mode...")
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        while True:
+            messages = chat_panel.locator("div[data-id]")
+            new_found = 0
+
             last_hour, last_minute = None, None
             current_date = datetime.now().date()
             for i in range(messages.count() - 1, -1, -1):
@@ -149,8 +135,25 @@ def live_checker(page, chat_panel):
                     current_date=current_date,
                     conn=conn,
                 )
-        for _ in range(100):
-            page.keyboard.press("PageDown")
-            time.sleep(0.5)
+                new_found += 1
 
-        time.sleep(CHECK_INTERVAL)
+            if new_found > 0:
+                for _ in range(SCROLL_UP_STEP):
+                    page.keyboard.press("PageUp")
+                    time.sleep(0.5)
+                last_hour, last_minute = None, None
+                current_date = datetime.now().date()
+                for i in range(messages.count() - 1, -1, -1):
+                    last_hour, last_minute, current_date = process_message(
+                        msg=messages.nth(i),
+                        seen_ids=seen_ids,
+                        last_hour=last_hour,
+                        last_minute=last_minute,
+                        current_date=current_date,
+                        conn=conn,
+                    )
+            for _ in range(100):
+                page.keyboard.press("PageDown")
+                time.sleep(0.5)
+
+            time.sleep(CHECK_INTERVAL)
