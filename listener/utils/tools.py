@@ -115,9 +115,10 @@ def live_checker(page, chat_panel, live_mode: bool = False) -> None:
                 else:
                     scroll_attempts = 0
 
-    print("Initial scan complete. Entering live check loop...")
+        print("Initial scan complete.")
 
     # Live check loop
+    print("Entering live check mode...")
     with sqlite3.connect(DB_PATH, timeout=30) as conn:
         while True:
             messages = chat_panel.locator("div[data-id]")
