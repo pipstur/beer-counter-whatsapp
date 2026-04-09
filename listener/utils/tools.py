@@ -62,7 +62,9 @@ def process_message(
         hour, minute, ampm = parse_time_12h(timestamp)
         hour_24 = convert_to_24h(hour, ampm)
 
-        current_date = determine_day_rollover(last_hour, last_minute, hour_24, minute, current_date)
+        current_date = determine_day_rollover(
+            last_hour, last_minute, hour_24, minute, current_date
+        )
         last_hour, last_minute = hour_24, minute
 
         dt = datetime(

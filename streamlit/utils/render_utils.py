@@ -1,3 +1,4 @@
+from turtle import width
 import rootutils
 
 from .compute_utils import (
@@ -70,7 +71,36 @@ def render_leaderboard(df: pd.DataFrame) -> None:
 
 def render_user_timelines(df: pd.DataFrame, users: List[str], level: AggregationLevel) -> None:
     st.subheader("📅 User Timelines")
-    for user in users:
+
+    # Search box for filtering users
+    search_query = st.text_input(
+        "🔍 Search users:", placeholder="Type a user name to filter...", key="user_search"
+    )
+
+    # Filter users based on search query
+    filtered_users = (
+        [user for user in users if search_query.lower() in user.lower()] if search_query else users
+    )
+
+    # Show message if no matches found
+    if search_query and not filtered_users:
+        st.warning(f"No users found matching '{search_query}'")
+        return
+
+    # Multi-select from filtered users
+    selected_users = st.multiselect(
+        "Select users to display:",
+        options=filtered_users,
+        default=filtered_users[: min(3, len(filtered_users))],  # Select first 3 by default
+        key="timeline_multiselect",
+    )
+
+    # Display user timelines
+    if not selected_users:
+        st.info("No users selected. Choose users from the dropdown above.")
+        return
+
+    for user in selected_users:
         user_df = df[df["user_name"] == user]
         if user_df.empty:
             continue
@@ -402,7 +432,14 @@ def render_users_view(
     st.markdown("---")
     render_rank_over_time(filtered_df)
     st.markdown("---")
-    render_user_timelines(filtered_df, selected_users, agg_level)
+
+    # Add button to toggle user timelines
+    if st.button("📅 Show User Timelines", key="toggle_timelines"):
+        st.session_state.show_timelines = not st.session_state.get("show_timelines", False)
+
+    # Only render timelines if button is clicked
+    if st.session_state.get("show_timelines", False):
+        render_user_timelines(filtered_df, selected_users, agg_level)
 
 
 def render_fun_and_patterns(df: pd.DataFrame) -> None:
