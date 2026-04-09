@@ -1,4 +1,3 @@
-from turtle import width
 import rootutils
 
 from .compute_utils import (
