@@ -87,12 +87,14 @@ def extract_message_text(msg: Locator) -> str:
         return ""
     return spans.first.inner_text().strip()
 
+
 def has_view_once(msg: Locator) -> bool:
     try:
-        badge = msg.locator('text=/view once/i')
+        badge = msg.locator("text=/view once/i")
         return badge.count() > 0
     except:
         return False
+
 
 def get_beer_count(msg: Locator) -> Optional[int]:
     image_count = msg.locator('div[role="button"][aria-label="Open picture"]').count()
