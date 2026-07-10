@@ -82,10 +82,10 @@ def determine_day_rollover(
 
 
 def extract_message_text(msg: Locator) -> str:
-    spans = msg.locator('span[data-testid="selectable-text"]')
-    if spans.count() == 0:
+    text = msg.locator(".selectable-text")
+    if text.count() == 0:
         return ""
-    return spans.first.inner_text().strip()
+    return text.first.inner_text().strip()
 
 
 def has_view_once(msg: Locator) -> bool:
