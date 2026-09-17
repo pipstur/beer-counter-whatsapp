@@ -3,7 +3,7 @@ from playwright.sync_api import Locator
 from listener import TIME_REGEX, PLUS_BEER_REGEX
 from datetime import datetime, timedelta
 
-DEBUG_UNMATCHED = True  # set to True to log unmatched messages for debugging
+DEBUG_UNMATCHED = False  # set to True to log unmatched messages for debugging
 
 
 def extract_user_timestamp(msg: Locator) -> Tuple[str, str, Optional[str]]:
