@@ -23,8 +23,8 @@ from data.utils.db_utils import save_message
 
 
 CHECK_INTERVAL = 60  # seconds between checks
-SCROLL_UP_STEP = 5  # keypresses per "load more history" nudge
-MAX_HISTORY_PASSES = 5  # consecutive empty passes before giving up on initial scan
+SCROLL_UP_STEP = 1  # keypresses per "load more history" nudge
+MAX_HISTORY_PASSES = 5
 
 from data.utils import DB_PATH
 
@@ -44,18 +44,6 @@ def launch_browser(user_data_dir: str) -> Tuple[BrowserContext, Page]:
     )
     page = context.new_page()
     return context, page
-
-
-# ---------------------------------------------------------------------------
-# Snapshotting
-# ---------------------------------------------------------------------------
-#
-# We never iterate by positional index (`.nth(i)`) against a live, virtualized
-# list. WhatsApp Web prepends/removes DOM nodes as you scroll, so any index
-# captured before a scroll can point at a totally different message after it.
-# Instead we snapshot {id, virtualized} for every currently-mounted row in a
-# single JS round-trip, filter down to what we actually need to touch, and
-# then re-locate each message by its stable `data-id` when we need to read it.
 
 
 def get_visible_snapshot(chat_panel: Locator) -> List[Dict[str, str]]:
@@ -99,11 +87,6 @@ def is_rendered(msg: Locator, settle_timeout_ms: int = 800) -> bool:
         return False
 
 
-# ---------------------------------------------------------------------------
-# Per-message processing
-# ---------------------------------------------------------------------------
-
-
 def process_message(
     msg: Locator,
     msg_id: str,
@@ -114,12 +97,6 @@ def process_message(
     conn: sqlite3.Connection,
 ) -> Tuple[Optional[int], Optional[int], datetime.date]:
     try:
-        # The snapshot only told us the row *started* mounting. Give it a
-        # short, bounded moment to actually finish (image swap-in, text
-        # nodes attaching) — no scrolling involved, so this can't trigger
-        # the history-splicing that caused messages to drift under us.
-        # If it never settles in time, skip for now; NOT marking it seen
-        # means a later pass will retry it once it's fully rendered.
         if not is_rendered(msg):
             return last_hour, last_minute, current_date
 
@@ -127,9 +104,6 @@ def process_message(
         beer_count = get_beer_count(msg)
 
         if beer_count is None or timestamp == "unknown":
-            # Fully rendered but genuinely not a beer message (text, system
-            # message, reaction-only bubble, etc.) — nothing will change if we
-            # look again, so it's safe to mark seen.
             seen_ids.add(msg_id)
             return last_hour, last_minute, current_date
 
@@ -188,8 +162,6 @@ def process_pass(
         return 0, last_hour, last_minute, current_date
 
     processed = 0
-    # snapshot is in DOM order (oldest → newest); walk it newest → oldest,
-    # same direction the original nth-based loop used.
     for row in reversed(todo):
         msg = locator_for_id(chat_panel, row["id"])
         last_hour, last_minute, current_date = process_message(
@@ -228,18 +200,11 @@ def scroll_to_bottom(page: Page, chat_panel: Locator) -> None:
     except Exception:
         pass
 
-    # Cheap safety net: a handful of End/PageDown presses in case the
-    # scrollable ancestor isn't chat_panel itself.
     page.keyboard.press("End")
     time.sleep(0.3)
     for _ in range(5):
         page.keyboard.press("PageDown")
         time.sleep(0.2)
-
-
-# ---------------------------------------------------------------------------
-# Main loop
-# ---------------------------------------------------------------------------
 
 
 def live_checker(page: Page, chat_panel: Locator, live_mode: bool = False) -> None:
@@ -262,8 +227,7 @@ def live_checker(page: Page, chat_panel: Locator, live_mode: bool = False) -> No
                 else:
                     empty_passes = 0
 
-                # Load older history. This is the ONLY place we scroll during
-                # the historical pass — no per-message scrolling fighting it.
+                # Load older history
                 scroll_up(page)
 
         print("Initial scan complete.")
@@ -271,9 +235,6 @@ def live_checker(page: Page, chat_panel: Locator, live_mode: bool = False) -> No
     print("Entering live check mode...")
     with sqlite3.connect(DB_PATH, timeout=30) as conn:
         while True:
-            # Live mode always looks at "now" — fresh date/time state each
-            # poll cycle, but shared between the two sub-passes below so a
-            # midnight-crossing scroll-up within one cycle doesn't reset twice.
             last_hour, last_minute = None, None
             current_date = datetime.now().date()
 
@@ -281,8 +242,6 @@ def live_checker(page: Page, chat_panel: Locator, live_mode: bool = False) -> No
                 chat_panel, seen_ids, conn, last_hour, last_minute, current_date
             )
 
-            # Nudge up briefly in case messages arrived while we were scrolled
-            # to the bottom and got virtualized away before we could read them.
             scroll_up(page, steps=SCROLL_UP_STEP)
             _, last_hour, last_minute, current_date = process_pass(
                 chat_panel, seen_ids, conn, last_hour, last_minute, current_date
