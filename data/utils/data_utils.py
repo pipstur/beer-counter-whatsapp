@@ -3,6 +3,8 @@ from playwright.sync_api import Locator
 from listener import TIME_REGEX, PLUS_BEER_REGEX
 from datetime import datetime, timedelta
 
+DEBUG_UNMATCHED = False  # set to True to log unmatched messages for debugging
+
 
 def extract_user_timestamp(msg: Locator) -> Tuple[str, str, Optional[str]]:
     nickname_loc = msg.locator("span[aria-label]")
@@ -97,6 +99,11 @@ def has_view_once(msg: Locator) -> bool:
 
 
 def get_beer_count(msg: Locator) -> Optional[int]:
+    """
+    Returns the beer count for a message, or None if it's not beer-relevant.
+    Caller is responsible for ensuring `msg` is fully rendered before calling this
+    (see ensure_rendered) — a virtualized stub will just look like "no media, no text".
+    """
     image_count = msg.locator('div[role="button"][aria-label="Open picture"]').count()
     gif_count = msg.locator('div[role="button"][aria-label="Play GIF"]').count()
     video_count = msg.locator('[data-icon="media-play"]').count()
@@ -116,5 +123,27 @@ def get_beer_count(msg: Locator) -> Optional[int]:
             return gif_count
         if video_count > 0:
             return video_count
+        return None
+
+    if DEBUG_UNMATCHED:
+        _log_unmatched(msg)
 
     return None
+
+
+def _log_unmatched(msg: Locator) -> None:
+    print("---- UNMATCHED ----")
+    print("data-id:", msg.get_attribute("data-id"))
+    print(
+        "aria-labels:",
+        msg.locator("[aria-label]").evaluate_all(
+            "els => els.map(e => e.getAttribute('aria-label'))"
+        ),
+    )
+    print(
+        "data-icons:",
+        msg.locator("[data-icon]").evaluate_all(
+            "els => els.map(e => e.getAttribute('data-icon'))"
+        ),
+    )
+    print("text:", extract_message_text(msg)[:120])

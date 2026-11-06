@@ -11,7 +11,22 @@ def open_whatsapp(page: Page) -> None:
     time.sleep(1)
 
 
+def dismiss_dialogs(page: Page, attempts: int = 3) -> None:
+    dialogs = page.locator("div[role='dialog'][aria-modal='true']")
+    for _ in range(attempts):
+        if dialogs.count() == 0:
+            return
+        print(f"Dismissing WhatsApp dialog: {dialogs.first.inner_text()[:200]!r}")
+        page.keyboard.press("Escape")
+        time.sleep(1)
+    if dialogs.count() > 0:
+        raise RuntimeError(
+            f"WhatsApp dialog could not be dismissed: {dialogs.first.inner_text()[:200]!r}"
+        )
+
+
 def open_group(page: Page, group_prefix: str) -> None:
+    dismiss_dialogs(page)
     chats = page.locator("span[title]")
     for i in range(chats.count()):
         title = chats.nth(i).get_attribute("title")

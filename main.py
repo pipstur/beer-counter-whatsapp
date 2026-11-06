@@ -11,10 +11,12 @@ from data.utils import DB_PATH
 
 from argparse import ArgumentParser
 
+
 def cli() -> Any:
     parser = ArgumentParser(description="Beer Counter WhatsApp Listener")
     parser.add_argument("--live", action="store_true", help="Enable live mode")
     return parser.parse_args()
+
 
 def main() -> None:
     init_db(DB_PATH)
