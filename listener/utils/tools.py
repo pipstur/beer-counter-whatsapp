@@ -10,6 +10,7 @@ from playwright.sync_api import (
     BrowserContext,
     Page,
     Locator,
+    JSHandle,
     TimeoutError as PlaywrightTimeoutError,
 )
 from data.utils.data_utils import (
@@ -24,7 +25,8 @@ from data.utils.db_utils import save_message
 
 CHECK_INTERVAL = 60  # seconds between checks
 SCROLL_UP_STEP = 1  # keypresses per "load more history" nudge
-MAX_HISTORY_PASSES = 5
+MAX_HISTORY_PASSES = 10
+OLDER_MESSAGES_TEXT = "older messages from your phone"
 
 from data.utils import DB_PATH
 
@@ -188,6 +190,46 @@ def scroll_up(
     time.sleep(settle)
 
 
+def get_scroller(chat_panel: Locator) -> JSHandle:
+    """Nearest ancestor-or-self of the chat panel that actually scrolls."""
+    return chat_panel.evaluate_handle(
+        """
+        el => {
+            for (let n = el; n; n = n.parentElement) {
+                const s = getComputedStyle(n);
+                if ((s.overflowY === 'auto' || s.overflowY === 'scroll')
+                    && n.scrollHeight > n.clientHeight) return n;
+            }
+            return el;
+        }
+        """
+    )
+
+
+def oldest_loaded_id(chat_panel: Locator) -> Optional[str]:
+    return chat_panel.evaluate(
+        "el => el.querySelector('div[data-id]')?.getAttribute('data-id') ?? null"
+    )
+
+
+def at_history_wall(page: Page) -> bool:
+    """WhatsApp stops lazy-loading at 'Click here to get older messages from your phone.'"""
+    return page.locator("#main button", has_text=OLDER_MESSAGES_TEXT).count() > 0
+
+
+def bounce_at_wall(page: Page, chat_panel: Locator, settle: float = 2.0) -> None:
+    """
+    Scroll down a bit and back to the top. At the history wall this makes
+    WhatsApp load the next chunk of older messages without clicking the
+    'get older messages from your phone' button.
+    """
+    scroller = get_scroller(chat_panel)
+    page.evaluate("s => { s.scrollTop = 1500; }", scroller)
+    time.sleep(0.8)
+    page.evaluate("s => { s.scrollTop = 0; }", scroller)
+    time.sleep(settle)
+
+
 def scroll_to_bottom(page: Page, chat_panel: Locator) -> None:
     """
     Jump straight to the latest message instead of spamming PageDown.
@@ -212,23 +254,30 @@ def live_checker(page: Page, chat_panel: Locator, live_mode: bool = False) -> No
 
     if not live_mode:
         print("Running initial scan...")
-        empty_passes = 0
+        stalled_passes = 0
         last_hour, last_minute = None, None
         current_date = datetime.now().date()
+        prev_oldest_id = None
 
         with sqlite3.connect(DB_PATH, timeout=30) as conn:
-            while empty_passes < MAX_HISTORY_PASSES:
-                processed, last_hour, last_minute, current_date = process_pass(
+            while stalled_passes < MAX_HISTORY_PASSES:
+                seen_before = len(seen_ids)
+                _, last_hour, last_minute, current_date = process_pass(
                     chat_panel, seen_ids, conn, last_hour, last_minute, current_date
                 )
 
-                if processed == 0:
-                    empty_passes += 1
+                oldest_id = oldest_loaded_id(chat_panel)
+                if oldest_id != prev_oldest_id or len(seen_ids) > seen_before:
+                    stalled_passes = 0
                 else:
-                    empty_passes = 0
+                    stalled_passes += 1
+                prev_oldest_id = oldest_id
 
                 # Load older history
-                scroll_up(page)
+                if at_history_wall(page):
+                    bounce_at_wall(page, chat_panel)
+                else:
+                    scroll_up(page)
 
         print("Initial scan complete.")
 
