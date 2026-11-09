@@ -46,7 +46,7 @@ Python implementation of a automated beer counter and dashboard for a personal w
     - Either on the [link](https://beer-counter-whatsapp.streamlit.app/).
     - Or run locally with:
       ```bash
-      streamlit run streamlit/app.py
+      streamlit run dashboard/app.py
       ```
 
 # Streamlit dashboard screenshots

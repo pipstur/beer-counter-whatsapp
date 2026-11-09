@@ -9,10 +9,9 @@ import sqlite3
 from playwright.sync_api import Locator, Page
 from listener.utils.tools import launch_browser
 from listener.whatsapp import get_chat_panel, open_group, open_whatsapp
-from data.utils.db_utils import DB_PATH
+from data.utils import DB_PATH, INITIAL_BEER_COUNT
 from listener import GROUP_PREFIX
 
-INITIAL_BEER_COUNT = 73
 BOT_NAME = "@PivoBot"
 answered_message_ids: set[str] = set()
 
@@ -21,7 +20,7 @@ def get_total_beers(conn: sqlite3.Connection) -> int:
     cursor = conn.cursor()
     cursor.execute("SELECT SUM(beer_count) FROM messages")
     result = cursor.fetchone()
-    return int(result[0] or 0)
+    return INITIAL_BEER_COUNT + int(result[0] or 0)
 
 
 def extract_message_text(msg: Locator) -> str:
@@ -62,22 +61,10 @@ def respond_to_pivo_queries(conn: sqlite3.Connection, page: Page, chat_panel: Lo
             continue
 
         text = extract_message_text(msg)
-        if "@PivoBot" in text and "koliko piva" in text.lower():
+        if is_pivo_query(text):
             if not answered_in_batch:
-                cursor = conn.cursor()
-                cursor.execute("SELECT SUM(beer_count) FROM messages")
-                result = cursor.fetchone()
-                total_beers = (
-                    INITIAL_BEER_COUNT + result[0] if result and result[0] is not None else 0
-                )
-
-                input_box = page.locator(
-                    '//*[@id="main"]/footer/div[1]/div/span/div/div/div/div[3]/div[1]'
-                )
-                input_box.click()
-                input_box.fill(f"Piva popijenih do sad: {total_beers}")
-                input_box.press("Enter")
-
+                total_beers = get_total_beers(conn)
+                send_message(page, f"Piva popijenih do sad: {total_beers}")
                 answered_in_batch = True
                 print(f"PivoBot je odgovorio: {total_beers} piva")
 
