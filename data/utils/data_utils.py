@@ -1,3 +1,4 @@
+import re
 from typing import Optional, Tuple
 from playwright.sync_api import Locator
 from listener import TIME_REGEX, PLUS_BEER_REGEX
@@ -34,15 +35,14 @@ def extract_user_timestamp(msg: Locator) -> Tuple[str, str, Optional[str]]:
 
 def parse_time_12h(timestamp: str) -> tuple[int, int, str]:
     """
-    Parses a 12-hour format timestamp (e.g., '10:51 AM') and returns hour, minute, AM/PM.
+    Parses a WhatsApp timestamp ('10:51 AM', '10:51AM' or 24h '14:30') and returns
+    hour, minute, AM/PM ('' for 24h times, which convert_to_24h leaves unchanged).
     """
-    parts = timestamp.strip().split()
-    if len(parts) != 2:
+    match = re.fullmatch(r"(\d{1,2}):(\d{2})\s?([AaPp][Mm])?", timestamp.strip())
+    if not match:
         raise ValueError(f"Invalid timestamp format: {timestamp}")
-    time_part, ampm = parts
-    hour_str, minute_str = time_part.split(":")
-    hour, minute = int(hour_str), int(minute_str)
-    return hour, minute, ampm.upper()
+    hour_str, minute_str, ampm = match.groups()
+    return int(hour_str), int(minute_str), (ampm or "").upper()
 
 
 def resolve_message_date(
@@ -94,7 +94,7 @@ def has_view_once(msg: Locator) -> bool:
     try:
         badge = msg.locator("text=/view once/i")
         return badge.count() > 0
-    except:
+    except Exception:
         return False
 
 
@@ -102,7 +102,7 @@ def get_beer_count(msg: Locator) -> Optional[int]:
     """
     Returns the beer count for a message, or None if it's not beer-relevant.
     Caller is responsible for ensuring `msg` is fully rendered before calling this
-    (see ensure_rendered) — a virtualized stub will just look like "no media, no text".
+    (see is_rendered) — a virtualized stub will just look like "no media, no text".
     """
     image_count = msg.locator('div[role="button"][aria-label="Open picture"]').count()
     gif_count = msg.locator('div[role="button"][aria-label="Play GIF"]').count()

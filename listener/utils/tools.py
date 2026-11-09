@@ -133,7 +133,8 @@ def process_message(
         save_message(conn, msg_id, nickname, full_timestamp, beer_count)
 
         return last_hour, last_minute, current_date
-    except Exception:
+    except Exception as e:
+        print(f"Skipped message {msg_id}: {type(e).__name__}: {e}")
         return last_hour, last_minute, current_date
 
 
@@ -249,14 +250,23 @@ def scroll_to_bottom(page: Page, chat_panel: Locator) -> None:
         time.sleep(0.2)
 
 
+def scan_start_state() -> Tuple[int, int, datetime.date]:
+    """
+    Seed the newest-to-oldest date tracking with the current time, so the first
+    message read is compared against "now": a 21:59 message seen at 16:30 belongs
+    to yesterday, not today.
+    """
+    now = datetime.now()
+    return now.hour, now.minute, now.date()
+
+
 def live_checker(page: Page, chat_panel: Locator, live_mode: bool = False) -> None:
     seen_ids: Set[str] = set()  # optionally prefill from DB
 
     if not live_mode:
         print("Running initial scan...")
         stalled_passes = 0
-        last_hour, last_minute = None, None
-        current_date = datetime.now().date()
+        last_hour, last_minute, current_date = scan_start_state()
         prev_oldest_id = None
 
         with sqlite3.connect(DB_PATH, timeout=30) as conn:
@@ -284,8 +294,7 @@ def live_checker(page: Page, chat_panel: Locator, live_mode: bool = False) -> No
     print("Entering live check mode...")
     with sqlite3.connect(DB_PATH, timeout=30) as conn:
         while True:
-            last_hour, last_minute = None, None
-            current_date = datetime.now().date()
+            last_hour, last_minute, current_date = scan_start_state()
 
             _, last_hour, last_minute, current_date = process_pass(
                 chat_panel, seen_ids, conn, last_hour, last_minute, current_date

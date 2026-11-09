@@ -13,7 +13,8 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from utils import ACHIEVEMENT_INFO, INITIAL_BEER_COUNT, WEEKDAY_ORDER, AGG_FREQ_MAP
+from data.utils import INITIAL_BEER_COUNT
+from utils import ACHIEVEMENT_INFO, WEEKDAY_ORDER, AGG_FREQ_MAP
 
 AggregationLevel = Literal["Hour", "Day", "Week"]
 

@@ -1,4 +1,3 @@
-INITIAL_BEER_COUNT = 240
 CACHE_TTL_SEC = 300
 WEEKDAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 ACHIEVEMENT_INFO = {
