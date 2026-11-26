@@ -25,8 +25,7 @@ from data.utils.db_utils import save_message
 
 CHECK_INTERVAL = 60  # seconds between checks
 SCROLL_UP_STEP = 1  # keypresses per "load more history" nudge
-MAX_HISTORY_PASSES = 10
-OLDER_MESSAGES_TEXT = "older messages from your phone"
+MAX_HISTORY_PASSES = 25  # loading past the "older messages" wall can stall for ~8 passes
 
 from data.utils import DB_PATH
 
@@ -213,9 +212,20 @@ def oldest_loaded_id(chat_panel: Locator) -> Optional[str]:
     )
 
 
-def at_history_wall(page: Page) -> bool:
-    """WhatsApp stops lazy-loading at 'Click here to get older messages from your phone.'"""
-    return page.locator("#main button", has_text=OLDER_MESSAGES_TEXT).count() > 0
+def load_older(page: Page, chat_panel: Locator, settle: float = 0.8) -> None:
+    """
+    Move one step back in history. At the top of what's loaded (the "get older
+    messages from your phone" wall, or while WhatsApp shows a spinner there)
+    bounce to trigger the next chunk; otherwise scroll up one screen. Scrolls
+    the container directly: PageUp silently does nothing once the panel loses
+    keyboard focus, and the wall button isn't always shown while loading.
+    """
+    scroller = get_scroller(chat_panel)
+    if page.evaluate("s => s.scrollTop", scroller) <= 5:
+        bounce_at_wall(page, chat_panel)
+    else:
+        page.evaluate("s => { s.scrollTop = Math.max(0, s.scrollTop - 0.8 * s.clientHeight); }", scroller)
+        time.sleep(settle)
 
 
 def bounce_at_wall(page: Page, chat_panel: Locator, settle: float = 2.0) -> None:
@@ -283,11 +293,7 @@ def live_checker(page: Page, chat_panel: Locator, live_mode: bool = False) -> No
                     stalled_passes += 1
                 prev_oldest_id = oldest_id
 
-                # Load older history
-                if at_history_wall(page):
-                    bounce_at_wall(page, chat_panel)
-                else:
-                    scroll_up(page)
+                load_older(page, chat_panel)
 
         print("Initial scan complete.")
 
