@@ -212,3 +212,5 @@ __marimo__/
 *.db
 *.pid
 chat_listener_data/
+data/beer_images/
+vision/cache/
